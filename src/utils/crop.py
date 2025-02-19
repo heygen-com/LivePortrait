@@ -4,20 +4,29 @@
 cropping function and the related preprocess functions for cropping
 """
 
-import numpy as np
 import os.path as osp
-from math import sin, cos, acos, degrees
-import cv2; cv2.setNumThreads(0); cv2.ocl.setUseOpenCL(False) # NOTE: enforce single thread
+from math import acos, cos, degrees, sin
+from typing import List, Tuple
+
+import cv2
+import numpy as np
+
+cv2.setNumThreads(0)
+cv2.ocl.setUseOpenCL(False)  # NOTE: enforce single thread
 from .rprint import rprint as print
 
 DTYPE = np.float32
 CV2_INTERP = cv2.INTER_LINEAR
+CV2_INTERP = cv2.INTER_LANCZOS4
+CV2_INTERP = cv2.INTER_AREA
+
 
 def make_abs_path(fn):
     return osp.join(osp.dirname(osp.realpath(__file__)), fn)
 
+
 def _transform_img(img, M, dsize, flags=CV2_INTERP, borderMode=None):
-    """ conduct similarity or affine transformation to the image, do not do border operation!
+    """conduct similarity or affine transformation to the image, do not do border operation!
     img:
     M: 2x3 matrix or 3x3 matrix
     dsize: target shape (width, height)
@@ -28,13 +37,20 @@ def _transform_img(img, M, dsize, flags=CV2_INTERP, borderMode=None):
         _dsize = (dsize, dsize)
 
     if borderMode is not None:
-        return cv2.warpAffine(img, M[:2, :], dsize=_dsize, flags=flags, borderMode=borderMode, borderValue=(0, 0, 0))
+        return cv2.warpAffine(
+            img,
+            M[:2, :],
+            dsize=_dsize,
+            flags=flags,
+            borderMode=borderMode,
+            borderValue=(0, 0, 0),
+        )
     else:
         return cv2.warpAffine(img, M[:2, :], dsize=_dsize, flags=flags)
 
 
 def _transform_pts(pts, M):
-    """ conduct similarity or affine transformation to the pts
+    """conduct similarity or affine transformation to the pts
     pts: Nx2 ndarray
     M: 2x3 matrix or 3x3 matrix
     return: Nx2
@@ -99,23 +115,26 @@ def parse_pt2_from_pt68(pt68, use_lip=True):
     """
     lm_idx = np.array([31, 37, 40, 43, 46, 49, 55], dtype=np.int32) - 1
     if use_lip:
-        pt5 = np.stack([
-            np.mean(pt68[lm_idx[[1, 2]], :], 0),  # left eye
-            np.mean(pt68[lm_idx[[3, 4]], :], 0),  # right eye
-            pt68[lm_idx[0], :],  # nose
-            pt68[lm_idx[5], :],  # lip
-            pt68[lm_idx[6], :]   # lip
-        ], axis=0)
+        pt5 = np.stack(
+            [
+                np.mean(pt68[lm_idx[[1, 2]], :], 0),  # left eye
+                np.mean(pt68[lm_idx[[3, 4]], :], 0),  # right eye
+                pt68[lm_idx[0], :],  # nose
+                pt68[lm_idx[5], :],  # lip
+                pt68[lm_idx[6], :],  # lip
+            ],
+            axis=0,
+        )
 
-        pt2 = np.stack([
-            (pt5[0] + pt5[1]) / 2,
-            (pt5[3] + pt5[4]) / 2
-        ], axis=0)
+        pt2 = np.stack([(pt5[0] + pt5[1]) / 2, (pt5[3] + pt5[4]) / 2], axis=0)
     else:
-        pt2 = np.stack([
-            np.mean(pt68[lm_idx[[1, 2]], :], 0),  # left eye
-            np.mean(pt68[lm_idx[[3, 4]], :], 0),  # right eye
-        ], axis=0)
+        pt2 = np.stack(
+            [
+                np.mean(pt68[lm_idx[[1, 2]], :], 0),  # left eye
+                np.mean(pt68[lm_idx[[3, 4]], :], 0),  # right eye
+            ],
+            axis=0,
+        )
 
     return pt2
 
@@ -125,40 +144,11 @@ def parse_pt2_from_pt5(pt5, use_lip=True):
     parsing the 2 points according to the 5 points, which cancels the roll
     """
     if use_lip:
-        pt2 = np.stack([
-            (pt5[0] + pt5[1]) / 2,
-            (pt5[3] + pt5[4]) / 2
-        ], axis=0)
+        pt2 = np.stack([(pt5[0] + pt5[1]) / 2, (pt5[3] + pt5[4]) / 2], axis=0)
     else:
-        pt2 = np.stack([
-            pt5[0],
-            pt5[1]
-        ], axis=0)
+        pt2 = np.stack([pt5[0], pt5[1]], axis=0)
     return pt2
 
-def parse_pt2_from_pt9(pt9, use_lip=True):
-    '''
-    parsing the 2 points according to the 9 points, which cancels the roll
-    ['right eye right', 'right eye left', 'left eye right', 'left eye left', 'nose tip', 'lip right', 'lip left', 'upper lip', 'lower lip']
-    '''
-    if use_lip:
-        pt9 = np.stack([
-            (pt9[2] + pt9[3]) / 2, # left eye
-            (pt9[0] + pt9[1]) / 2, # right eye
-            pt9[4],
-            (pt9[5] + pt9[6] ) / 2 # lip
-        ], axis=0)
-        pt2 = np.stack([
-            (pt9[0] + pt9[1]) / 2, # eye
-            pt9[3] # lip
-        ], axis=0)
-    else:
-        pt2 = np.stack([
-            (pt9[2] + pt9[3]) / 2,
-            (pt9[0] + pt9[1]) / 2,
-        ], axis=0)
-
-    return pt2
 
 def parse_pt2_from_pt_x(pts, use_lip=True):
     if pts.shape[0] == 101:
@@ -174,10 +164,8 @@ def parse_pt2_from_pt_x(pts, use_lip=True):
     elif pts.shape[0] > 101:
         # take the first 101 points
         pt2 = parse_pt2_from_pt101(pts[:101], use_lip=use_lip)
-    elif pts.shape[0] == 9:
-        pt2 = parse_pt2_from_pt9(pts, use_lip=use_lip)
     else:
-        raise Exception(f'Unknow shape: {pts.shape}')
+        raise Exception(f"Unknow shape: {pts.shape}")
 
     if not use_lip:
         # NOTE: to compile with the latter code, need to rotate the pt2 90 degrees clockwise manually
@@ -195,7 +183,7 @@ def parse_rect_from_landmark(
     vx_ratio=0,
     vy_ratio=0,
     use_deg_flag=False,
-    **kwargs
+    **kwargs,
 ):
     """parsing center, size, angle from 101/68/5/x landmarks
     vx_ratio: the offset ratio along the pupil axis x-axis, multiplied by size
@@ -203,7 +191,7 @@ def parse_rect_from_landmark(
 
     judge with pts.shape
     """
-    pt2 = parse_pt2_from_pt_x(pts, use_lip=kwargs.get('use_lip', True))
+    pt2 = parse_pt2_from_pt_x(pts, use_lip=kwargs.get("use_lip", True))
 
     uy = pt2[1] - pt2[0]
     l = np.linalg.norm(uy)
@@ -237,9 +225,12 @@ def parse_rect_from_landmark(
         size[1] = m
 
     size *= scale  # scale size
-    center = center0 + ux * center1[0] + uy * center1[1]  # counterclockwise rotation, equivalent to M.T @ center1.T
-    center = center + ux * (vx_ratio * size) + uy * \
-        (vy_ratio * size)  # considering the offset in vx and vy direction
+    center = (
+        center0 + ux * center1[0] + uy * center1[1]
+    )  # counterclockwise rotation, equivalent to M.T @ center1.T
+    center = (
+        center + ux * (vx_ratio * size) + uy * (vy_ratio * size)
+    )  # considering the offset in vx and vy direction
 
     if use_deg_flag:
         angle = degrees(angle)
@@ -253,36 +244,40 @@ def parse_bbox_from_landmark(pts, **kwargs):
     w, h = size
 
     # calculate the vertex positions before rotation
-    bbox = np.array([
-        [cx-w/2, cy-h/2],  # left, top
-        [cx+w/2, cy-h/2],
-        [cx+w/2, cy+h/2],  # right, bottom
-        [cx-w/2, cy+h/2]
-    ], dtype=DTYPE)
+    bbox = np.array(
+        [
+            [cx - w / 2, cy - h / 2],  # left, top
+            [cx + w / 2, cy - h / 2],
+            [cx + w / 2, cy + h / 2],  # right, bottom
+            [cx - w / 2, cy + h / 2],
+        ],
+        dtype=DTYPE,
+    )
 
     # construct rotation matrix
     bbox_rot = bbox.copy()
-    R = np.array([
-        [np.cos(angle), -np.sin(angle)],
-        [np.sin(angle),  np.cos(angle)]
-    ], dtype=DTYPE)
+    R = np.array(
+        [[np.cos(angle), -np.sin(angle)], [np.sin(angle), np.cos(angle)]], dtype=DTYPE
+    )
 
     # calculate the relative position of each vertex from the rotation center, then rotate these positions, and finally add the coordinates of the rotation center
     bbox_rot = (bbox_rot - center) @ R.T + center
 
     return {
-        'center': center,  # 2x1
-        'size': size,  # scalar
-        'angle': angle,  # rad, counterclockwise
-        'bbox': bbox,  # 4x2
-        'bbox_rot': bbox_rot,  # 4x2
+        "center": center,  # 2x1
+        "size": size,  # scalar
+        "angle": angle,  # rad, counterclockwise
+        "bbox": bbox,  # 4x2
+        "bbox_rot": bbox_rot,  # 4x2
     }
 
 
-def crop_image_by_bbox(img, bbox, lmk=None, dsize=512, angle=None, flag_rot=False, **kwargs):
+def crop_image_by_bbox(
+    img, bbox, lmk=None, dsize=512, angle=None, flag_rot=False, **kwargs
+):
     left, top, right, bot = bbox
     if int(right - left) != int(bot - top):
-        print(f'right-left {right-left} != bot-top {bot-top}')
+        print(f"right-left {right-left} != bot-top {bot-top}")
     size = right - left
 
     src_center = np.array([(left + right) / 2, (top + bot) / 2], dtype=DTYPE)
@@ -295,21 +290,31 @@ def crop_image_by_bbox(img, bbox, lmk=None, dsize=512, angle=None, flag_rot=Fals
         tcx, tcy = tgt_center[0], tgt_center[1]  # target center
         # need to infer
         M_o2c = np.array(
-            [[s * costheta, s * sintheta, tcx - s * (costheta * cx + sintheta * cy)],
-             [-s * sintheta, s * costheta, tcy - s * (-sintheta * cx + costheta * cy)]],
-            dtype=DTYPE
+            [
+                [s * costheta, s * sintheta, tcx - s * (costheta * cx + sintheta * cy)],
+                [
+                    -s * sintheta,
+                    s * costheta,
+                    tcy - s * (-sintheta * cx + costheta * cy),
+                ],
+            ],
+            dtype=DTYPE,
         )
     else:
         M_o2c = np.array(
-            [[s, 0, tgt_center[0] - s * src_center[0]],
-             [0, s, tgt_center[1] - s * src_center[1]]],
-            dtype=DTYPE
+            [
+                [s, 0, tgt_center[0] - s * src_center[0]],
+                [0, s, tgt_center[1] - s * src_center[1]],
+            ],
+            dtype=DTYPE,
         )
 
     # if flag_rot and angle is None:
-        # print('angle is None, but flag_rotate is True', style="bold yellow")
+    # print('angle is None, but flag_rotate is True', style="bold yellow")
 
-    img_crop = _transform_img(img, M_o2c, dsize=dsize, borderMode=kwargs.get('borderMode', None))
+    img_crop = _transform_img(
+        img, M_o2c, dsize=dsize, borderMode=kwargs.get("borderMode", None)
+    )
     lmk_crop = _transform_pts(lmk, M_o2c) if lmk is not None else None
 
     M_o2c = np.vstack([M_o2c, np.array([0, 0, 1], dtype=DTYPE)])
@@ -318,23 +323,50 @@ def crop_image_by_bbox(img, bbox, lmk=None, dsize=512, angle=None, flag_rot=Fals
     # cv2.imwrite('crop.jpg', img_crop)
 
     return {
-        'img_crop': img_crop,
-        'lmk_crop': lmk_crop,
-        'M_o2c': M_o2c,
-        'M_c2o': M_c2o,
+        "img_crop": img_crop,
+        "lmk_crop": lmk_crop,
+        "M_o2c": M_o2c,
+        "M_c2o": M_c2o,
     }
 
 
-def _estimate_similar_transform_from_pts(
-    pts,
-    dsize,
-    scale=1.5,
-    vx_ratio=0,
-    vy_ratio=-0.1,
-    flag_do_rot=True,
-    **kwargs
+def crop_image_by_bbox_(
+    img, bbox, dsize=512,
 ):
-    """ calculate the affine matrix of the cropped image from sparse points, the original image to the cropped image, the inverse is the cropped image to the original image
+    left, top, right, bot = bbox
+
+    if int(right - left) != int(bot - top):
+        print(f"right-left {right-left} != bot-top {bot-top}")
+
+    x, y, w, h = int(left), int(top), int(right - left), int(bot - top)
+    # print(x, y, w, h)
+    img_h, img_w = img.shape[:2]
+    x1, y1 = max(0, x), max(0, y)
+    x2, y2 = min(img_w, x + w), min(img_h, y + h)
+    cropped_image = img[y1:y2, x1:x2]
+    out_h, out_w = h, w
+    bordered_image = np.zeros((out_h, out_w, 3), dtype=np.uint8)
+    start_y = max(0, -y)
+    start_x = max(0, -x)
+    bordered_image[
+        start_y : start_y + (y2 - y1), start_x : start_x + (x2 - x1)
+    ] = cropped_image
+    img_crop = cv2.resize(bordered_image, (dsize, dsize), interpolation=CV2_INTERP)
+    s = dsize / out_h
+    new_bb = [
+        int(start_x * s),
+        int(start_y * s),
+        int(s * (start_x + (x2 - x1))),
+        int(s * (start_y + (y2 - y1))),
+    ]
+
+    return {"img_crop": img_crop, "bbox_inner": new_bb}
+
+
+def _estimate_similar_transform_from_pts(
+    pts, dsize, scale=1.5, vx_ratio=0, vy_ratio=-0.1, flag_do_rot=True, halfbody=False, **kwargs
+):
+    """calculate the affine matrix of the cropped image from sparse points, the original image to the cropped image, the inverse is the cropped image to the original image
     pts: landmark, 101 or 68 points or other points, Nx2
     scale: the larger scale factor, the smaller face ratio
     vx_ratio: x shift
@@ -342,12 +374,15 @@ def _estimate_similar_transform_from_pts(
     rot_flag: if it is true, conduct correction
     """
     center, size, angle = parse_rect_from_landmark(
-        pts, scale=scale, vx_ratio=vx_ratio, vy_ratio=vy_ratio,
-        use_lip=kwargs.get('use_lip', True)
+        pts,
+        scale=scale,
+        vx_ratio=vx_ratio,
+        vy_ratio=vy_ratio,
+        use_lip=kwargs.get("use_lip", True),
     )
 
     s = dsize / size[0]  # scale
-    tgt_center = np.array([dsize / 2, dsize / 2], dtype=DTYPE)  # center of dsize
+    tgt_center = np.array([dsize / 2, dsize / 4 if halfbody else dsize / 2], dtype=DTYPE)  # center of dsize
 
     if flag_do_rot:
         costheta, sintheta = cos(angle), sin(angle)
@@ -355,35 +390,48 @@ def _estimate_similar_transform_from_pts(
         tcx, tcy = tgt_center[0], tgt_center[1]  # target center
         # need to infer
         M_INV = np.array(
-            [[s * costheta, s * sintheta, tcx - s * (costheta * cx + sintheta * cy)],
-             [-s * sintheta, s * costheta, tcy - s * (-sintheta * cx + costheta * cy)]],
-            dtype=DTYPE
+            [
+                [s * costheta, s * sintheta, tcx - s * (costheta * cx + sintheta * cy)],
+                [
+                    -s * sintheta,
+                    s * costheta,
+                    tcy - s * (-sintheta * cx + costheta * cy),
+                ],
+            ],
+            dtype=DTYPE,
         )
     else:
         M_INV = np.array(
-            [[s, 0, tgt_center[0] - s * center[0]],
-             [0, s, tgt_center[1] - s * center[1]]],
-            dtype=DTYPE
+            [
+                [s, 0, tgt_center[0] - s * center[0]],
+                [0, s, tgt_center[1] - s * center[1]],
+            ],
+            dtype=DTYPE,
         )
 
     M_INV_H = np.vstack([M_INV, np.array([0, 0, 1])])
     M = np.linalg.inv(M_INV_H)
 
+    if halfbody:
+        # shift center by 1/4 of the size down along y-axis
+        center[1] += size[1] / 4
+
     # M_INV is from the original image to the cropped image, M is from the cropped image to the original image
-    return M_INV, M[:2, ...]
+    return M_INV, M[:2, ...], (center, size, angle)
 
 
-def crop_image(img, pts: np.ndarray, **kwargs):
-    dsize = kwargs.get('dsize', 224)
-    scale = kwargs.get('scale', 1.5)  # 1.5 | 1.6
-    vy_ratio = kwargs.get('vy_ratio', -0.1)  # -0.0625 | -0.1
+def crop_image(img, pts: np.ndarray, halfbody=False, **kwargs):
+    dsize = kwargs.get("dsize", 224)
+    scale = kwargs.get("scale", 1.5)  # 1.5 | 1.6
+    vy_ratio = kwargs.get("vy_ratio", -0.1)  # -0.0625 | -0.1
 
-    M_INV, _ = _estimate_similar_transform_from_pts(
+    M_INV, _, bbox_csa = _estimate_similar_transform_from_pts(
         pts,
         dsize=dsize,
         scale=scale,
         vy_ratio=vy_ratio,
-        flag_do_rot=kwargs.get('flag_do_rot', True),
+        flag_do_rot=kwargs.get("flag_do_rot", True),
+        halfbody=halfbody,
     )
 
     img_crop = _transform_img(img, M_INV, dsize)  # origin to crop
@@ -393,31 +441,34 @@ def crop_image(img, pts: np.ndarray, **kwargs):
     M_c2o = np.linalg.inv(M_o2c)
 
     ret_dct = {
-        'M_o2c': M_o2c,  # from the original image to the cropped image 3x3
-        'M_c2o': M_c2o,  # from the cropped image to the original image 3x3
-        'img_crop': img_crop,  # the cropped image
-        'pt_crop': pt_crop,  # the landmarks of the cropped image
+        "M_o2c": M_o2c,  # from the original image to the cropped image 3x3
+        "M_c2o": M_c2o,  # from the cropped image to the original image 3x3
+        "img_crop": img_crop,  # the cropped image
+        "pt_crop": pt_crop,  # the landmarks of the cropped image
+        "bbox_csa": bbox_csa,  # the bbox of the cropped image
     }
 
     return ret_dct
 
-def average_bbox_lst(bbox_lst):
-    if len(bbox_lst) == 0:
-        return None
+
+def average_bbox_lst(bbox_lst: List[Tuple[float, float, float, float]]) -> Tuple[float, float, float, float]:
+    assert len(bbox_lst) > 0, "bbox_lst is empty"
     bbox_arr = np.array(bbox_lst)
     return np.mean(bbox_arr, axis=0).tolist()
 
+
 def prepare_paste_back(mask_crop, crop_M_c2o, dsize):
-    """prepare mask for later image paste back
-    """
+    """prepare mask for later image paste back"""
     mask_ori = _transform_img(mask_crop, crop_M_c2o, dsize)
-    mask_ori = mask_ori.astype(np.float32) / 255.
+    mask_ori = mask_ori.astype(np.float32) / 255.0
     return mask_ori
 
+
 def paste_back(img_crop, M_c2o, img_ori, mask_ori):
-    """paste back the image
-    """
+    """paste back the image"""
     dsize = (img_ori.shape[1], img_ori.shape[0])
     result = _transform_img(img_crop, M_c2o, dsize=dsize)
-    result = np.clip(mask_ori * result + (1 - mask_ori) * img_ori, 0, 255).astype(np.uint8)
+    result = np.clip(mask_ori * result + (1 - mask_ori) * img_ori, 0, 255).astype(
+        np.uint8
+    )
     return result

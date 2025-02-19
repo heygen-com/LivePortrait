@@ -11,7 +11,7 @@ import torch.nn.functional as F
 PI = np.pi
 
 
-def headpose_pred_to_degree(pred):
+def headpose_pred_to_degree(pred: torch.Tensor) -> torch.Tensor:
     """
     pred: (bs, 66) or (bs, 1) or others
     """
@@ -28,7 +28,7 @@ def headpose_pred_to_degree(pred):
     return pred
 
 
-def get_rotation_matrix(pitch_, yaw_, roll_):
+def get_rotation_matrix(pitch_: torch.Tensor, yaw_: torch.Tensor, roll_: torch.Tensor) -> torch.Tensor:
     """ the input is in degree
     """
     # transform to radian
