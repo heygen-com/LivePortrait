@@ -16,7 +16,7 @@ model_dict = {
 
 
 class MotionExtractor(nn.Module):
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs) -> None:
         super(MotionExtractor, self).__init__()
 
         # default is convnextv2_base
